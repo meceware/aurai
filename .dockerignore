@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+.next
+data
+spikes
+docs
+.env*
+!.env.example
+.playwright-mcp
+*.png
+Dockerfile
+docker-compose.yml

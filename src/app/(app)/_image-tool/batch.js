@@ -139,7 +139,7 @@ export function BatchStudio({ tool, photos, options, prefs, canRun, analysisCost
   const known = costs.every((cost) => typeof cost === 'number');
   const total = costs.reduce((sum, cost) => sum + (cost ?? 0), 0) + (local ? 0 : analysisCost * photos.length);
   const approximate = photos.some((photo) => options[photo.id]?.find((option) => option.id === chosen?.id)?.approximate);
-  const blocked = (!canRun && !local) || pending || !chosen;
+  const blocked = (!canRun && !local) || pending || !chosen || (tool.needsText && !instruction.trim());
 
   const discard = (photo) =>
     startTransition(async () => {

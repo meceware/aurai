@@ -119,6 +119,11 @@ export function Thread({ session, tool, canRun, prefs, options, labels, analysis
       // Both renditions, so comparing follows whichever version is on screen.
       locked: run.locked.displayId,
       ai: run.ai?.displayId ?? run.locked.displayId,
+      // Edit Image paints over the version shown, at its own proportions.
+      sizes: {
+        locked: { width: run.locked.width, height: run.locked.height },
+        ai: run.ai ? { width: run.ai.width, height: run.ai.height } : { width: run.locked.width, height: run.locked.height },
+      },
     }));
   const target = finished.find((result) => result.id === selection.runId) ?? finished.at(-1) ?? null;
 
@@ -163,6 +168,7 @@ export function Thread({ session, tool, canRun, prefs, options, labels, analysis
       <Composer
         sessionId={session.id}
         tool={tool}
+        source={session.source}
         canRun={canRun}
         results={finished}
         selection={{ action: selection.action, runId: target?.id ?? null, view: target ? viewForServer(viewOf(target.id)) : null }}

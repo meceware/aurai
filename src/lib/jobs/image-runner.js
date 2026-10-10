@@ -8,6 +8,7 @@ import { edgeOf, largerResolution, LOCAL_RESIZE } from '../model-options.js';
 import { colorizeLock } from '../media/colorize-lock.js';
 import { exifFor } from '../media/exif.js';
 import { colorLock, structureOf } from '../media/colorlock.js';
+import { areaLock, markedPhoto } from '../media/area-lock.js';
 import { repairLock } from '../media/repair-lock.js';
 import { detailLock, resizeOnly } from '../media/upscale-lock.js';
 import { mixToJpeg } from '../media/mix.js';
@@ -50,6 +51,8 @@ const friendly = (error) =>
 
 // Prompts are the person's own versions where they have edited them in Settings.
 function promptFor(run, params, prompts, stats, analysis) {
+  // Edit Image's text is the edit itself, refined or not; painted, the prompt says where.
+  if (params.mode === 'edit') return fillTemplate(prompts[params.maskAssetId ? 'edit-area' : 'edit'].text, { instruction: run.instruction });
   if (run.kind === 'followup') return fillTemplate((params.mode === 'repair' ? prompts['repair-refine'] : prompts.followup).text, { instruction: run.instruction });
   const instruction = run.instruction ? `Additional request from the user: ${run.instruction}` : '';
   const template = (prompts[params.mode] ?? prompts.enhance).text;
@@ -61,9 +64,13 @@ function promptFor(run, params, prompts, stats, analysis) {
  * recoloured (Enhance, Colorize), the original with only its damage repaired (Repair), or the
  * original enlarged with only finer detail added (Upscale). With the measurements for its card.
  */
-async function lockFor(params, sourceBytes, aiBytes, { format, exif }) {
+async function lockFor(params, sourceBytes, aiBytes, { format, exif, maskBytes }) {
   const round = (value, digits) => (typeof value === 'number' ? Number(value.toFixed(digits)) : null);
   const alignment = (map) => ({ hypothesis: map.hypothesis, scale: map.scale, psr: round(map.psr, 1) });
+  if (params.mode === 'edit') {
+    const locked = await areaLock(sourceBytes, aiBytes, maskBytes, { format, exif });
+    return { locked, fidelity: { lock: 'area', area: round(locked.fit.area, 4), alignment: alignment(locked.fit.map) } };
+  }
   if (params.mode === 'repair' || params.mode === 'upscale') {
     const locked = params.mode === 'repair' ? await repairLock(sourceBytes, aiBytes, { format, exif }) : await detailLock(sourceBytes, aiBytes, { format, exif });
     const { map } = locked.fit;
@@ -196,6 +203,14 @@ async function execute(run, signal) {
     if (params.from !== 'ai' && params.dials) inputBytes = await mixToJpeg(sourceBytes, inputBytes, params.dials);
   }
 
+  // Edit Image, painted: the area as the person painted it over this input.
+  let maskBytes = null;
+  if (params.mode === 'edit' && params.maskAssetId) {
+    const mask = assetFor(run.user_id, params.maskAssetId);
+    if (!mask) throw new Error('The painted area is missing. Paint it again.');
+    maskBytes = await readFile(absolutePath(mask.path));
+  }
+
   const prompts = getPrompts(run.user_id);
   const { analysis, cost: analysisCost } = await analysisFor(run, params, prompts, client, sourceBytes, source.meta?.stats, signal);
   const prompt = promptFor(run, params, prompts, source.meta?.stats, analysis);
@@ -203,7 +218,8 @@ async function execute(run, signal) {
   const body = buildImageRequest({
     model: run.model,
     prompt,
-    dataUrl: await toDataUrl(inputBytes),
+    // Painted, the model sees the area tinted: no image model on OpenRouter takes a mask.
+    dataUrl: await toDataUrl(maskBytes ? await markedPhoto(inputBytes, maskBytes) : inputBytes),
     width: source.width,
     height: source.height,
     catalogEntry,
@@ -242,28 +258,35 @@ async function execute(run, signal) {
     written.push(ai.path);
 
     // The AI render is only a guide: the result is built from the original's own pixels (lockFor).
-    const lockedFormat = source.mime === 'image/png' ? 'png' : 'jpeg';
-    const { locked, fidelity } = await lockFor(params, sourceBytes, aiBytes, { format: lockedFormat, exif: await exifFor(sourceBytes) });
-    const lockedAsset = await storeAsset({
-      userId: run.user_id,
-      imageSessionId: run.session_id,
-      folder,
-      kind: 'locked',
-      data: locked.buffer,
-      mime: lockedFormat === 'png' ? 'image/png' : 'image/jpeg',
-      ext: lockedFormat === 'png' ? 'png' : 'jpg',
-      width: locked.width,
-      height: locked.height,
-    });
-    written.push(lockedAsset.path);
-    const preview = await renderPreview(locked.buffer);
-    const previewAsset = await storeAsset({ userId: run.user_id, imageSessionId: run.session_id, folder, kind: 'preview', parentAssetId: lockedAsset.id, ...preview });
-    written.push(previewAsset.path);
+    // Except in Edit Image, where the AI's image is the result, and where a painted edit keeps
+    // what it is edited from (the original, or the result being refined) outside the area.
+    let lockedAsset = ai;
+    let fidelity = { lock: 'edit' };
+    if (params.mode !== 'edit' || maskBytes) {
+      const lockedFormat = source.mime === 'image/png' ? 'png' : 'jpeg';
+      const lockedResult = await lockFor(params, params.mode === 'edit' ? inputBytes : sourceBytes, aiBytes, { format: lockedFormat, exif: await exifFor(sourceBytes), maskBytes });
+      const { locked } = lockedResult;
+      fidelity = lockedResult.fidelity;
+      lockedAsset = await storeAsset({
+        userId: run.user_id,
+        imageSessionId: run.session_id,
+        folder,
+        kind: 'locked',
+        data: locked.buffer,
+        mime: lockedFormat === 'png' ? 'image/png' : 'image/jpeg',
+        ext: lockedFormat === 'png' ? 'png' : 'jpg',
+        width: locked.width,
+        height: locked.height,
+      });
+      written.push(lockedAsset.path);
+      const preview = await renderPreview(locked.buffer);
+      const previewAsset = await storeAsset({ userId: run.user_id, imageSessionId: run.session_id, folder, kind: 'preview', parentAssetId: lockedAsset.id, ...preview });
+      written.push(previewAsset.path);
+    }
     if (Math.max(aiPreview.width, aiPreview.height) >= PREVIEW_EDGE) {
       const aiPreviewAsset = await storeAsset({ userId: run.user_id, imageSessionId: run.session_id, folder, kind: 'preview', parentAssetId: ai.id, ...aiPreview });
       written.push(aiPreviewAsset.path);
     }
-
 
     const updated = prepared(
       `UPDATE image_runs SET status = 'succeeded', ai_asset_id = ?, locked_asset_id = ?, fidelity_json = ?, cost_usd = ?,

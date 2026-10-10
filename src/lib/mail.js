@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { createTransport } from 'nodemailer';
 import { dataDir } from './config.js';
 
-export const mailFrom = process.env.EMAIL_FROM || 'Aurai <aurai@localhost>';
+const configured = (process.env.EMAIL_FROM ?? '').trim();
+export const mailFrom = (configured.match(/<([^>]+)>/)?.[1] ?? configured).trim() || 'aurai@localhost';
 
 let transport = null;
 

@@ -39,7 +39,7 @@ export async function ImageSessionPage({ params, mode }) {
         <DoneButton kind="image" sessionId={view.id} doneOn={doneOn(view.closedAt)} />
         <DeleteSession sessionId={view.id} />
       </PageHeader>
-      <Thread session={view} tool={toolFor(mode)} canRun={canRun} prefs={prefs} options={options} labels={labels} analysisCost={analysisCostFor(prefs)} />
+      <Thread session={view} tool={toolFor(mode)} canRun={canRun} prefs={prefs} options={options} labels={labels} analysisCost={['enhance', 'colorize'].includes(mode) ? analysisCostFor(prefs) : 0} />
     </>
   );
 }

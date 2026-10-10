@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Film, ImageUp, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { isImageMode, MAX_BATCH_PHOTOS } from '@/lib/image-tools';
+import { isImageMode, MAX_BATCH_PHOTOS, toolFor } from '@/lib/image-tools';
 import { cn } from '@/lib/utils';
 
 // What each kind of upload takes. Listing only these image types makes iOS convert HEIC photos
@@ -87,7 +87,9 @@ export function Dropzone({ mode = 'enhance', disabled = false }) {
       if (failures.length) toast.error(files.length > 1 ? `${failures.length} of ${files.length} could not be uploaded` : failures[0], files.length > 1 ? { description: failures.join('\n') } : undefined);
       if (!ids.length) return setProgress(null);
       setProgress({ done: files.length, count: files.length, fraction: 1 });
-      router.push(ids.length === 1 ? `/${mode}/${ids[0]}` : `/${mode}/batch?ids=${ids.join(',')}`);
+      // An image tool's address is its own (Edit Image is /edit-image); a video tool's is its name.
+      const base = isImageMode(mode) ? toolFor(mode).path : `/${mode}`;
+      router.push(ids.length === 1 ? `${base}/${ids[0]}` : `${base}/batch?ids=${ids.join(',')}`);
       router.refresh();
     },
     [mode, kind, several, disabled, progress, router],

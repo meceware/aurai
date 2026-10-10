@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowUp, ChevronDown, ChevronsUpDown, ChevronUp, Loader2 } from 'lucide-react';
+import { ArrowUp, Brush, ChevronDown, ChevronsUpDown, ChevronUp, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ModelPicker } from '@/components/model-picker';
 import {
@@ -31,10 +31,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { formatDuration, formatPrice } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { rerun, startRun } from './actions';
+import { Painter } from './painter';
+
+const media = (id) => `/api/media/${id}`;
 
 /** The three ways to continue, in the words a person would use. */
 /** Which picture a refinement starts from: whatever the result's card is showing. */
-function refineSource(view, n) {
+function refineSource(tool, view, n) {
+  if (tool.mode === 'edit') return view?.version === 'ai' ? `the whole image of ${n}` : n;
   if (view?.version === 'ai') return `the AI redraw of ${n}`;
   return `the Local version of ${n}${view?.dials ? ', with your adjustments' : ''}`;
 }
@@ -45,7 +49,7 @@ function choices(tool, target, view) {
     {
       value: 'refine',
       title: `Refine ${n}`,
-      description: `Edit ${refineSource(view, n)}. Only what you describe changes; everything else in it stays as it is.`,
+      description: `Edit ${refineSource(tool, view, n)}. Only what you describe changes; everything else in it stays as it is.`,
       needsTarget: true,
     },
     {
@@ -89,7 +93,31 @@ function TargetPicker({ results, value, onChange }) {
   );
 }
 
-export function Composer({ sessionId, tool, canRun, results, selection, onSelect, focusSignal, prefs, options, analysisCost = 0, open, onOpenChange }) {
+/** Edit Image's painted area: a button to paint one, then what is painted, to change or drop. */
+function PaintButton({ paint, onPaint, onRemove, disabled }) {
+  if (!paint) {
+    return (
+      <Button type="button" variant="outline" size="sm" className="h-9" onClick={onPaint} disabled={disabled}>
+        <Brush className="size-4" />
+        Paint an area
+      </Button>
+    );
+  }
+  return (
+    <span className="inline-flex h-9 items-center rounded-md border border-brand/50 bg-brand/10 text-sm">
+      <button type="button" className="flex h-full items-center gap-1.5 rounded-l-md pr-1 pl-2.5 hover:bg-brand/15" onClick={onPaint} disabled={disabled}>
+        <Brush className="size-4 text-brand" />
+        Painted area
+        <span className="text-xs text-muted-foreground tabular-nums">{paint.share < 0.01 ? '<1' : Math.round(paint.share * 100)}%</span>
+      </button>
+      <button type="button" className="grid h-full place-items-center rounded-r-md px-2 hover:bg-brand/15" onClick={onRemove} disabled={disabled} aria-label="Remove the painted area">
+        <X className="size-3.5" />
+      </button>
+    </span>
+  );
+}
+
+export function Composer({ sessionId, tool, source, canRun, results, selection, onSelect, focusSignal, prefs, options, analysisCost = 0, open, onOpenChange }) {
   const router = useRouter();
   const preferred = prefs?.[`${tool.mode}Model`];
   const [model, setModel] = useState(options.some((o) => o.id === preferred) ? preferred : options[0]?.id);
@@ -97,6 +125,9 @@ export function Composer({ sessionId, tool, canRun, results, selection, onSelect
   const [instruction, setInstruction] = useState('');
   const [pending, startTransition] = useTransition();
   const box = useRef(null);
+  // Edit Image: what is painted, and over which image (`over.key`); the painter while it is open.
+  const [paint, setPaint] = useState(null);
+  const [painting, setPainting] = useState(false);
 
   const hasResults = results.length > 0;
   const target = results.find((result) => result.id === selection.runId) ?? results.at(-1) ?? null;
@@ -105,6 +136,18 @@ export function Composer({ sessionId, tool, canRun, results, selection, onSelect
   // Repeating uses the earlier run's model; the cost shown should be that one's.
   const find = (id) => options.find((candidate) => candidate.id === id);
   const chosen = repeating ? (find(target?.model) ?? { label: target?.label, cost: null }) : (find(model) ?? options[0]);
+
+  // A refinement is painted over the version its card shows; anything else over the photo.
+  const refineVersion = selection.view?.version === 'ai' ? 'ai' : 'locked';
+  const over =
+    action === 'refine' && target
+      ? { key: `${target.id}:${refineVersion}`, src: media(target[refineVersion]), ...target.sizes[refineVersion] }
+      : source
+        ? { key: source.id, src: media(source.displayId), width: source.width, height: source.height }
+        : null;
+  const canPaint = Boolean(tool.paint && over && !repeating);
+  // Painted over another image than this run would start from: not used, and not shown.
+  const painted = canPaint && paint?.over === over.key ? paint : null;
 
   // "Refine" on a result card lands here, ready to describe the change.
   useEffect(() => {
@@ -117,7 +160,11 @@ export function Composer({ sessionId, tool, canRun, results, selection, onSelect
   // The free resize runs here: it needs no key, and takes no text.
   const local = Boolean(chosen?.local);
   const blocked =
-    (!canRun && !local) || pending || !chosen || (action === 'refine' && !instruction.trim()) || ((action === 'refine' || repeating) && !target);
+    (!canRun && !local) ||
+    pending ||
+    !chosen ||
+    ((action === 'refine' || (tool.needsText && !repeating)) && !instruction.trim()) ||
+    ((action === 'refine' || repeating) && !target);
 
   // Refinements skip the analysis; everything else pays for it when it is on.
   const estimate = (chosen?.cost ?? 0) + (action === 'refine' ? 0 : analysisCost);
@@ -142,9 +189,11 @@ export function Composer({ sessionId, tool, canRun, results, selection, onSelect
             parentRunId: action === 'refine' ? target.id : null,
             from: action === 'refine' ? (selection.view?.version ?? 'locked') : undefined,
             dials: action === 'refine' ? (selection.view?.dials ?? undefined) : undefined,
+            mask: painted?.dataUrl ?? null,
           });
       if (result?.error) return toast.error(result.error);
       if (!repeating) setInstruction('');
+      setPaint(null);
       router.refresh();
     });
   };
@@ -156,9 +205,13 @@ export function Composer({ sessionId, tool, canRun, results, selection, onSelect
       ? target?.instruction
         ? `Uses #${target.number}'s text: “${target.instruction}”`
         : `Uses #${target?.number}'s settings, with no extra text`
-      : action === 'refine'
+      : painted
+        ? 'What to do in the painted area, e.g. “remove it”, “a red cap”'
+        : action === 'refine'
         ? tool.mode === 'repair'
           ? 'Describe what is left to repair, e.g. “the scratch on the left”'
+          : tool.mode === 'edit'
+          ? 'What to change next, e.g. “make the cap blue”'
           : 'Describe the change, e.g. “a little darker”, “less yellow in the sky”'
         : tool.placeholder;
 
@@ -240,6 +293,7 @@ export function Composer({ sessionId, tool, canRun, results, selection, onSelect
         ) : null}
 
         <div className="mt-1 flex flex-wrap items-center gap-2 px-1 pt-1">
+          {canPaint ? <PaintButton paint={painted} onPaint={() => setPainting(true)} onRemove={() => setPaint(null)} disabled={pending} /> : null}
           {repeating ? (
             <span className="px-2 text-sm text-muted-foreground">{chosen?.label}</span>
           ) : options.length ? (
@@ -267,6 +321,19 @@ export function Composer({ sessionId, tool, canRun, results, selection, onSelect
           </Button>
         </div>
       </form>
+
+      {painting && over ? (
+        <Painter
+          image={over}
+          initial={painted?.dataUrl ?? null}
+          onClose={() => setPainting(false)}
+          onDone={(result) => {
+            setPaint(result ? { ...result, over: over.key } : null);
+            setPainting(false);
+            box.current?.focus();
+          }}
+        />
+      ) : null}
 
       <ResponsiveDialog open={confirming} onOpenChange={setConfirming}>
         <ResponsiveDialogContent>

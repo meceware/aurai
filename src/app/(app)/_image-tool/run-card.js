@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   Bandage,
+  Brush,
   ChevronsUpDown,
   Clapperboard,
   Download,
@@ -57,7 +58,7 @@ export function viewForServer(view) {
 }
 const money = (usd) => `$${usd.toFixed(usd < 0.1 ? 3 : 2)}`;
 
-export const TOOL_ICONS = { enhance: Palette, colorize: Wand2, repair: Bandage, upscale: ImageUpscale };
+export const TOOL_ICONS = { enhance: Palette, colorize: Wand2, repair: Bandage, upscale: ImageUpscale, edit: Brush };
 
 // What each result is, and where it came from.
 function describe(run, tool, parent) {
@@ -66,9 +67,10 @@ function describe(run, tool, parent) {
   return { label: tool.resultLabel, icon: TOOL_ICONS[tool.mode] ?? Palette, origin: null };
 }
 
-/** What Repair and Upscale did, in a few words: how much was repaired, how large it now is. */
+/** What Repair, Upscale and Edit Image did, in a few words: how much was repaired or changed, how large it now is. */
 function outcome(run) {
   const fidelity = run.fidelity;
+  if (typeof fidelity?.area === 'number') return `${fidelity.area < 0.01 ? '<1' : Math.round(fidelity.area * 100)}% of the photo changed`;
   if (typeof fidelity?.repaired === 'number') {
     const share = fidelity.repaired * 100;
     return share < 0.1 ? 'Nothing needed repair' : `${share < 1 ? '<1' : Math.round(share)}% repaired`;
@@ -270,8 +272,9 @@ function CompareWith({ others, against, onChange, current, number }) {
 export function RunCard({ run, number, parent, others = [], source, title, tool, selected, onRefine, modelLabel, downloadDefaults, view = DEFAULT_VIEW, onView }) {
   const router = useRouter();
   const VERSIONS = tool.versions;
-  // Upscale's free resize has only the Local version.
-  const version = run.ai ? view.version : 'locked';
+  // Upscale's free resize has only the Local version, and an unpainted edit only the AI's image.
+  const single = !run.ai || run.ai.id === run.locked?.id;
+  const version = single ? 'locked' : view.version;
   const { dials } = view;
   const setVersion = (next) => onView((current) => ({ ...current, version: next }));
   const setDials = (next) => onView((current) => ({ ...current, dials: typeof next === 'function' ? next(current.dials) : next }));
@@ -378,7 +381,7 @@ export function RunCard({ run, number, parent, others = [], source, title, tool,
           before={before}
           beforeLabel={compareWith ? `#${compareWith.number}` : 'Original'}
           after={after}
-          afterLabel={`#${number} ${VERSIONS[version].name}${adjusted ? ' · adjusted' : ''}`}
+          afterLabel={`#${number}${single && run.ai ? '' : ` ${VERSIONS[version].name}`}${adjusted ? ' · adjusted' : ''}`}
           width={source.width}
           height={source.height}
           center={<CompareWith others={others} against={against} onChange={setAgainst} current={compareWith} number={number} />}
@@ -389,7 +392,7 @@ export function RunCard({ run, number, parent, others = [], source, title, tool,
         <>
           <div className="space-y-3 rounded-md bg-muted/40 px-2 py-1.5">
             <div className="flex min-w-0 items-center gap-2">
-              {run.ai ? (
+              {!single ? (
                 <ToggleGroup type="single" size="sm" variant="outline" value={version} onValueChange={(value) => value && setVersion(value)} aria-label="Version">
                   {Object.entries(VERSIONS).map(([key, value]) => (
                     <ToggleGroupItem key={key} value={key} className="px-3.5">
@@ -398,21 +401,21 @@ export function RunCard({ run, number, parent, others = [], source, title, tool,
                   ))}
                 </ToggleGroup>
               ) : (
-                <span className="px-1 text-xs text-muted-foreground">Enlarged here, nothing drawn by a model</span>
+                <span className="px-1 text-xs text-muted-foreground">{run.ai ? 'The image as the model drew it' : 'Enlarged here, nothing drawn by a model'}</span>
               )}
-              {run.ai ? (
+              {!single ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button type="button" className="text-muted-foreground hover:text-foreground" aria-label="Local or AI?">
+                    <button type="button" className="text-muted-foreground hover:text-foreground" aria-label={`${VERSIONS.locked.label} or ${VERSIONS.ai.label}?`}>
                       <Info className="size-4" />
                     </button>
                   </TooltipTrigger>
                   <TooltipContent className="max-w-80 space-y-2">
                     <p>
-                      <strong>Local</strong> — {VERSIONS.locked.help}
+                      <strong>{VERSIONS.locked.label}</strong> — {VERSIONS.locked.help}
                     </p>
                     <p>
-                      <strong>AI</strong> — {VERSIONS.ai.help}
+                      <strong>{VERSIONS.ai.label}</strong> — {VERSIONS.ai.help}
                     </p>
                   </TooltipContent>
                 </Tooltip>
@@ -494,6 +497,8 @@ export function RunCard({ run, number, parent, others = [], source, title, tool,
             open={downloading}
             onOpenChange={setDownloading}
             initialVersion={version}
+            versions={single && run.ai ? { locked: { name: tool.resultLabel } } : VERSIONS}
+            single={single}
             run={run}
             number={number}
             source={source}

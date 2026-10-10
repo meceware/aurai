@@ -15,7 +15,8 @@ const { migrate } = await import('./migrate.js');
 const { createImageRun, createImageSession, deleteImageRun, deleteImageSession, getBatchView, getImageSessionView, listImageSessions, setImageSessionDone } = await import('./image-sessions.js');
 const { startImageRunner } = await import('./jobs/image-runner.js');
 const { UploadError } = await import('./media/ingest.js');
-const { absolutePath, removeUserMedia, sweepOrphanFiles } = await import('./storage.js');
+const { absolutePath, removeUserMedia, sessionFolder, sweepOrphanFiles } = await import('./storage.js');
+const { storeAsset } = await import('./assets.js');
 const { LOCAL_RESIZE } = await import('./model-options.js');
 
 migrate(getDb(), join(import.meta.dirname, '..', '..', 'migrations'));
@@ -224,6 +225,65 @@ test('Repair keeps the photo and records what it repaired; Upscale enlarges, wit
   assert.equal(free.fidelity.lock, 'resize');
 
   for (const id of [repairId, upscaleId]) await deleteImageSession('u1', id);
+});
+
+test('Edit Image: unpainted, the AI image is the result; painted, the photo is kept outside the area', async () => {
+  const runner = startImageRunner();
+  const finished = (runId) =>
+    waitFor(() => {
+      const row = prepared('SELECT * FROM image_runs WHERE id = ?').get(runId);
+      return row.status === 'succeeded' || row.status === 'failed' ? row : null;
+    }, 40000);
+  const sessionId = await createImageSession({ userId: 'u1', buffer: await warmPhoto(), filename: 'edit.jpg', mode: 'edit' });
+  const folder = sessionFolder('u1', 'image', sessionId);
+
+  const whole = createImageRun({ userId: 'u1', sessionId, kind: 'edit', model: 'test/image-model', instruction: 'make it winter', params: { mode: 'edit', analysis: false } });
+  runner.wake();
+  const plain = await finished(whole);
+  assert.equal(plain.status, 'succeeded', plain.error);
+  assert.match(plain.compiled_prompt, /^Edit this photograph[\s\S]*make it winter/);
+  assert.equal(plain.locked_asset_id, plain.ai_asset_id, 'one version: the AI image');
+  assert.equal(JSON.parse(plain.fidelity_json).lock, 'edit');
+
+  // Painted over the right third, as the browser sends it: white on black, smaller than the photo.
+  const maskData = Buffer.alloc(300 * 200);
+  for (let i = 0; i < maskData.length; i += 1) if (i % 300 >= 200) maskData[i] = 255;
+  const mask = await storeAsset({
+    userId: 'u1',
+    imageSessionId: sessionId,
+    folder,
+    kind: 'mask',
+    data: await sharp(maskData, { raw: { width: 300, height: 200, channels: 1 } }).png().toBuffer(),
+    mime: 'image/png',
+    ext: 'png',
+    width: 300,
+    height: 200,
+  });
+  const area = createImageRun({ userId: 'u1', sessionId, kind: 'edit', model: 'test/image-model', instruction: 'a red cap', params: { mode: 'edit', analysis: false, maskAssetId: mask.id } });
+  runner.wake();
+  const painted = await finished(area);
+  assert.equal(painted.status, 'succeeded', painted.error);
+  assert.match(painted.compiled_prompt, /^The area tinted red[\s\S]*a red cap/);
+  assert.notEqual(painted.locked_asset_id, painted.ai_asset_id);
+  const view = getImageSessionView('u1', sessionId).runs[1];
+  assert.equal(view.locked.width, 900, 'the photo at its own size');
+  assert.equal(view.maskId, mask.id);
+  assert.equal(view.fidelity.lock, 'area');
+  // The mock recolors everything; outside the paint the photo is its own, inside it is not.
+  const [photo, locked] = await Promise.all([
+    sharp(absolutePath(prepared('SELECT a.path FROM assets a JOIN image_sessions s ON s.source_asset_id = a.id WHERE s.id = ?').get(sessionId).path)).raw().toBuffer(),
+    sharp(absolutePath(prepared('SELECT path FROM assets WHERE id = ?').get(painted.locked_asset_id).path)).raw().toBuffer(),
+  ]);
+  const differs = (x, y) => Math.max(...[0, 1, 2].map((c) => Math.abs(photo[(y * 900 + x) * 3 + c] - locked[(y * 900 + x) * 3 + c])));
+  assert.ok(differs(100, 300) <= 3, `kept outside: ${differs(100, 300)}`);
+  assert.ok(differs(800, 300) > 6, `changed inside: ${differs(800, 300)}`);
+
+  // An unpainted result is one file for both versions; deleting it leaves no file behind.
+  const plainPath = prepared('SELECT path FROM assets WHERE id = ?').get(plain.ai_asset_id).path;
+  await deleteImageRun('u1', whole);
+  assert.equal(existsSync(absolutePath(plainPath)), false);
+  await deleteImageSession('u1', sessionId);
+  assert.equal(existsSync(folder), false);
 });
 
 test('a photo marked done moves to Done, comes back on request, and on a new run', async () => {

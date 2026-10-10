@@ -1,4 +1,4 @@
-import { Bandage, ImageUpscale, Palette, Wand2 } from 'lucide-react';
+import { Bandage, Brush, ImageUpscale, Palette, Wand2 } from 'lucide-react';
 import { Dropzone } from '@/components/dropzone';
 import { EmptyHero } from '@/components/empty-hero';
 import { PageHeader } from '@/components/page-header';
@@ -7,7 +7,7 @@ import { toolFor } from '@/lib/image-tools';
 import { requireUser } from '@/lib/session';
 import { getUserSettings } from '@/lib/settings';
 
-const ICONS = { enhance: Palette, colorize: Wand2, repair: Bandage, upscale: ImageUpscale };
+const ICONS = { enhance: Palette, colorize: Wand2, repair: Bandage, upscale: ImageUpscale, edit: Brush };
 
 /** The first screen of an image tool: what it does, and where to drop a photo. */
 export async function ImageToolLanding({ mode }) {

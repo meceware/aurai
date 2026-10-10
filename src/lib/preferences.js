@@ -3,7 +3,7 @@ import { prepared } from './db.js';
 import { MODEL_ID, starterImageModels, starterVisionModel } from './model-options.js';
 import { starterEditModels, starterVideoModels } from './video-options.js';
 import { DURATIONS, VIDEO_TARGETS } from './video-pricing.js';
-import { DEFAULT_PROMPTS, ANALYSIS_PROMPT, MOTION_PRESETS, REPAIR_FOLLOWUP_PROMPT, VIDEO_EDIT_PROMPT, VIDEO_NEGATIVE_PROMPT } from './prompts/defaults.js';
+import { DEFAULT_PROMPTS, ANALYSIS_PROMPT, EDIT_AREA_PROMPT, MOTION_PRESETS, REPAIR_FOLLOWUP_PROMPT, VIDEO_EDIT_PROMPT, VIDEO_NEGATIVE_PROMPT } from './prompts/defaults.js';
 
 // A person's defaults. Stored as JSON so new settings need no migration; read through this
 // schema so stored values from older versions (or hand edits) can never break a run.
@@ -18,6 +18,8 @@ export const prefsSchema = z.object({
   colorizeModel: modelId.nullable().catch(null),
   repairModel: modelId.nullable().catch(null),
   upscaleModel: modelId.nullable().catch(null),
+  // Edit Image's (not Edit Video's: those are `editModels`, video models).
+  editModel: modelId.nullable().catch(null),
   // Per model, for models that take a quality level; unset leaves it to the model.
   qualities: z.record(z.string(), z.enum(['auto', 'low', 'medium', 'high'])).catch({}),
   // The AI redraw matches the photo's size up to this; Local results are always full size.
@@ -80,6 +82,7 @@ function normalize(prefs) {
     repairModel: enabled.includes(prefs.repairModel) ? prefs.repairModel : first,
     // Upscale offers only models that draw at 2K or more; the composer falls back among those.
     upscaleModel: enabled.includes(prefs.upscaleModel) ? prefs.upscaleModel : first,
+    editModel: enabled.includes(prefs.editModel) ? prefs.editModel : first,
     qualities: Object.fromEntries(Object.entries(prefs.qualities).filter(([id]) => enabled.includes(id))),
     analysisModel: prefs.analysisModel ?? starterVisionModel(),
     ...normalizeVideo(prefs),
@@ -138,6 +141,20 @@ export const PROMPTS = {
     description: 'Sent with the photo when you press Upscale.',
     placeholders: ['instruction'],
     default: DEFAULT_PROMPTS.upscale,
+  },
+  edit: {
+    label: 'Edit Image',
+    description: 'Sent with the photo when you edit it without painting. Must include {{instruction}}, which is where your words go.',
+    placeholders: ['instruction'],
+    required: ['instruction'],
+    default: DEFAULT_PROMPTS.edit,
+  },
+  'edit-area': {
+    label: 'Edit Image · Painted area',
+    description: 'Sent with the photo, the area you painted tinted red, when you edit only part of it. Must include {{instruction}}.',
+    placeholders: ['instruction'],
+    required: ['instruction'],
+    default: EDIT_AREA_PROMPT,
   },
   analysis: {
     label: 'Analysis',

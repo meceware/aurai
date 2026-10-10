@@ -1,7 +1,7 @@
 // The image tools as the person sees them. Each tool is its own menu entry, landing page and
 // history; a session belongs to one tool (its `mode`). `dials` says whether its Local version
-// takes the Color / Brightness / Exposure dials; `refine` whether a result can be refined; and
-// `versions` how its two results are named.
+// takes the Color / Brightness / Exposure dials; `refine` whether a result can be refined;
+// `versions` how its two results are named; and `paint` whether an area can be painted to edit.
 
 const COLOR_VERSIONS = {
   locked: {
@@ -89,6 +89,33 @@ export const IMAGE_TOOLS = {
         help: "Your photo enlarged, with only the detail finer than it had taken from the AI. Every shape, face and color is your photo's own.",
       },
       ai: { label: 'AI', name: 'AI redraw', help: 'The whole image as the model drew it at high resolution. Faces or small details may differ from your photo.' },
+    },
+  },
+  edit: {
+    mode: 'edit',
+    path: '/edit-image',
+    title: 'Edit Image',
+    verb: 'Edit',
+    working: 'Editing…',
+    resultLabel: 'Edited',
+    heroTitle: 'Change a photo with a sentence',
+    heroText:
+      'Say what to change: “make it a winter day”, “remove the man on the left”. Paint over a part of the photo to change only that part; everything else stays your own.',
+    empty: 'Photos you edit will appear here.',
+    placeholder: 'What to change, e.g. “give him a red cap”',
+    // Required: there is nothing to do without it.
+    needsText: true,
+    paint: true,
+    dials: false,
+    refine: true,
+    // Only a painted edit has two versions; otherwise the AI's image is the result.
+    versions: {
+      locked: {
+        label: 'Painted area',
+        name: 'Painted area',
+        help: "Your photo, with the AI's change only in the area you painted (and what it drew right next to it), matched to the light around it. Everything else is untouched.",
+      },
+      ai: { label: 'Whole image', name: 'Whole image', help: 'The whole image as the model drew it. It may also have changed things outside the area you painted.' },
     },
   },
 };

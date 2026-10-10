@@ -3,6 +3,7 @@ import { AppSidebar } from '@/components/app-sidebar';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import { boot } from '@/lib/boot';
 import { listImageSessions } from '@/lib/image-sessions';
+import { toolFor } from '@/lib/image-tools';
 import { requireUser } from '@/lib/session';
 import { listVideoSessions, VIDEO_TOOLS } from '@/lib/video-sessions';
 
@@ -30,7 +31,7 @@ export default async function AppLayout({ children }) {
     done: Boolean(session.closed_at),
     mode: session.mode,
     title: session.title,
-    href: `/${session.mode}/${session.id}`,
+    href: `${toolFor(session.mode).path}/${session.id}`,
     thumb: session.thumb_id ? `/api/media/${session.thumb_id}` : null,
   }));
   const history = {
@@ -38,6 +39,7 @@ export default async function AppLayout({ children }) {
     colorize: sessions.filter((session) => session.mode === 'colorize'),
     repair: sessions.filter((session) => session.mode === 'repair'),
     upscale: sessions.filter((session) => session.mode === 'upscale'),
+    edit: sessions.filter((session) => session.mode === 'edit'),
     animate: videoHistory(user.id, 'animate'),
     'edit-video': videoHistory(user.id, 'edit'),
   };

@@ -3,8 +3,9 @@
 import { readFile } from 'node:fs/promises';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
+import sharp from 'sharp';
 import { z } from 'zod';
-import { assetFor } from '@/lib/assets';
+import { assetFor, storeAsset } from '@/lib/assets';
 import { boot } from '@/lib/boot';
 import {
   createImageRun,
@@ -25,9 +26,10 @@ import { hit } from '@/lib/rate-limit';
 import { requireUser } from '@/lib/session';
 import { getUserSettings } from '@/lib/settings';
 import { serverEnv } from '@/lib/config';
+import { checkedMask } from '@/lib/media/area-lock';
 import { UploadError } from '@/lib/media/ingest';
 import { isNeutral, mixToJpeg } from '@/lib/media/mix';
-import { absolutePath, usedBytes } from '@/lib/storage';
+import { absolutePath, sessionFolder, usedBytes } from '@/lib/storage';
 
 const runSchema = z.object({
   sessionId: z.string().uuid(),
@@ -42,7 +44,38 @@ const runSchema = z.object({
   // For a refinement: which version of the result it starts from, and the Local dials it was set to.
   from: z.enum(['locked', 'ai']).optional(),
   dials: z.object({ color: z.number().min(0).max(1), light: z.number().min(0).max(1), ev: z.number().min(-1).max(1) }).optional(),
+  // Edit Image: the area painted over the photo (or the result being refined), white on black.
+  mask: z.string().max(900_000, 'The painted area is too detailed. Paint it more simply.').startsWith('data:image/png;base64,').optional().nullable(),
 });
+
+const NEEDS_TEXT = 'Say what to change, e.g. “give him a red cap”.';
+
+/**
+ * The painted area sent with an edit, checked against the image it was painted over and kept
+ * with the photo, so the edit can be repeated. Returns its asset id, or an error to show.
+ */
+async function storeMask(userId, sessionId, dataUrl, over) {
+  const bytes = Buffer.from(dataUrl.slice(dataUrl.indexOf(',') + 1), 'base64');
+  const checked = await checkedMask(bytes).catch(() => null);
+  if (!checked) return { error: 'Paint over the part to change first.' };
+  const ratio = over.width / over.height;
+  if (Math.abs(checked.width / checked.height - ratio) > ratio * 0.02) return { error: 'The painted area does not fit this photo. Paint it again.' };
+  if (usedBytes(userId) >= serverEnv().USER_QUOTA_MB * 1024 * 1024) return { error: 'Your storage is full. Delete something first.' };
+  const data = await sharp(bytes).extractChannel(0).threshold(128).png({ compressionLevel: 9 }).toBuffer();
+  const asset = await storeAsset({
+    userId,
+    imageSessionId: sessionId,
+    folder: sessionFolder(userId, 'image', sessionId),
+    kind: 'mask',
+    data,
+    mime: 'image/png',
+    ext: 'png',
+    width: checked.width,
+    height: checked.height,
+    meta: { share: Number(checked.share.toFixed(4)) },
+  });
+  return { id: asset.id };
+}
 
 /**
  * What a run is started with: the chosen model, the person's defaults, and the resolution the AI
@@ -98,7 +131,7 @@ export async function startRun(input) {
   const user = await requireUser();
   const parsed = runSchema.safeParse(input);
   if (!parsed.success) return { error: parsed.error.issues[0].message };
-  const { sessionId, model, instruction, parentRunId, from, dials } = parsed.data;
+  const { sessionId, model, instruction, parentRunId, from, dials, mask } = parsed.data;
   if (!ownsImageSession(user.id, sessionId)) return { error: 'Photo not found.' };
   // The tool decides the mode: everything in an Enhance session is enhanced, and so on.
   const mode = prepared('SELECT mode FROM image_sessions WHERE id = ?').get(sessionId).mode;
@@ -116,9 +149,22 @@ export async function startRun(input) {
     if (!instruction) return { error: 'Describe the change you want, e.g. “a little warmer”.' };
     if (!toolFor(mode).refine) return { error: `A result in ${toolFor(mode).title} cannot be refined. Start over or repeat it instead.` };
   }
+  if (toolFor(mode).needsText && !instruction) return { error: NEEDS_TEXT };
 
   const problem = canRun(user.id, { local });
   if (problem) return { error: problem };
+
+  // Painted over what this edit starts from: the result being refined, or the photo.
+  let maskAssetId = null;
+  if (mask && toolFor(mode).paint) {
+    const over = parent
+      ? assetFor(user.id, from === 'ai' ? parent.ai_asset_id : parent.locked_asset_id)
+      : assetFor(user.id, prepared('SELECT source_asset_id FROM image_sessions WHERE id = ?').get(sessionId).source_asset_id);
+    if (!over) return { error: 'That image is no longer available.' };
+    const stored = await storeMask(user.id, sessionId, mask, over);
+    if (stored.error) return stored;
+    maskAssetId = stored.id;
+  }
 
   const id = createImageRun({
     userId: user.id,
@@ -127,7 +173,7 @@ export async function startRun(input) {
     model,
     instruction,
     parentRunId: parent?.id ?? null,
-    params: await runParams(prefs, mode, model, sessionId, parent ? { from, dials } : null),
+    params: { ...(await runParams(prefs, mode, model, sessionId, parent ? { from, dials } : null)), ...(maskAssetId ? { maskAssetId } : {}) },
   });
   boot().imageRunner.wake();
   revalidatePath(`${toolFor(mode).path}/${sessionId}`);
@@ -261,6 +307,7 @@ export async function startBatch(input) {
   const prefs = getPrefs(user.id);
   const unusable = await modelProblem(prefs, mode, model);
   if (unusable) return { error: unusable };
+  if (toolFor(mode).needsText && !instruction) return { error: NEEDS_TEXT };
   const problem = canRun(user.id, { local: mode === 'upscale' && model === LOCAL_RESIZE });
   if (problem) return { error: problem };
 

@@ -56,11 +56,25 @@ Keep everything exactly as it is: every face, facial feature, expression, eyes, 
 This is only an enlargement: keep any scratches, dust, stains or film grain as they are, and do not repair, retouch, smooth or colorize anything. Do not add, remove, move, reshape, beautify or restyle anything, and do not give it an artificial, over-sharpened or painted look.
 {{instruction}}`;
 
+// Edit Image: the person's words are the edit. Painted, the model is shown the photo with the
+// area tinted red (no image model on OpenRouter takes a mask), and Aurai keeps the photo's own
+// pixels outside it (see media/area-lock.js).
+export const EDIT_PROMPT = `Edit this photograph as described below.
+
+The edit: {{instruction}}
+
+Keep everything the edit does not mention as it is: the people and their faces, everything else in the photo, the framing and the aspect ratio.`;
+
+export const EDIT_AREA_PROMPT = `The area tinted red in this photo is the part to change. Change it as described below, and nothing else: keep everything outside it exactly as it is, and leave no red tint anywhere.
+
+The change: {{instruction}}`;
+
 export const DEFAULT_PROMPTS = {
   enhance: ENHANCE_PROMPT,
   colorize: COLORIZE_PROMPT,
   repair: REPAIR_PROMPT,
   upscale: UPSCALE_PROMPT,
+  edit: EDIT_PROMPT,
 };
 
 /** Replaces `{{name}}` with the value, dropping lines whose placeholder resolved to nothing. */

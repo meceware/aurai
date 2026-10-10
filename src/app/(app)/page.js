@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Bandage, Clapperboard, Film, ImageIcon, ImageUpscale, Loader2, Palette, Plus, TriangleAlert, Wand2 } from 'lucide-react';
+import { ArrowRight, Bandage, Brush, Clapperboard, Film, ImageIcon, ImageUpscale, Loader2, Palette, Plus, TriangleAlert, Wand2 } from 'lucide-react';
 import { KeyBanner } from '@/components/key-banner';
 import { PageHeader } from '@/components/page-header';
 import { serverEnv } from '@/lib/config';
@@ -43,6 +43,14 @@ const TOOLS = {
     unit: ['photo', 'photos'],
     made: ['result', 'results'],
   },
+  edit: {
+    href: '/edit-image',
+    icon: Brush,
+    title: 'Edit Image',
+    text: 'Change a photo with words. Paint over a part of it to change only that part, and keep the rest as it is.',
+    unit: ['photo', 'photos'],
+    made: ['edit', 'edits'],
+  },
   animate: {
     href: '/animate',
     icon: Clapperboard,
@@ -62,7 +70,7 @@ const TOOLS = {
 };
 
 const SECTIONS = [
-  { title: 'Image tools', tools: ['enhance', 'colorize', 'repair', 'upscale'] },
+  { title: 'Image tools', tools: ['enhance', 'colorize', 'repair', 'upscale', 'edit'] },
   { title: 'Video tools', tools: ['animate', 'edit-video'] },
 ];
 

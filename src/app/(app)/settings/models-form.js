@@ -319,6 +319,7 @@ export function ModelsForm({ prefs: initial, images, vision, videos, edits, edit
             ['repairModel', 'Repair', selected],
             // Upscale needs a model that draws at 2K or more.
             ['upscaleModel', 'Upscale', selected.filter((model) => ['2K', '4K'].includes(model.maxResolution))],
+            ['editModel', 'Edit Image', selected],
           ].map(([field, label, models]) => (
             <div key={field} className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">{label}</Label>

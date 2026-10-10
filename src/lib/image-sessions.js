@@ -136,6 +136,8 @@ export function getImageSessionView(userId, sessionId) {
       createdAt: run.created_at,
       startedAt: run.started_at,
       fidelity: run.fidelity_json ? JSON.parse(run.fidelity_json) : null,
+      // Edit Image: the area painted for this edit, white on black.
+      maskId: JSON.parse(run.params_json || '{}').maskAssetId ?? null,
       analysis: run.analysis_json ? JSON.parse(run.analysis_json) : null,
       ai: display(assetFor(userId, run.ai_asset_id)),
       locked: display(assetFor(userId, run.locked_asset_id)),
@@ -203,7 +205,8 @@ export async function deleteImageRun(userId, runId) {
   const run = getRun(userId, runId);
   if (!run) return false;
 
-  const assetIds = [run.ai_asset_id, run.locked_asset_id].filter(Boolean);
+  // The same asset when the AI's image is the result itself (Edit Image, unpainted).
+  const assetIds = [...new Set([run.ai_asset_id, run.locked_asset_id].filter(Boolean))];
   const paths = assetIds.length
     ? prepared(
         `SELECT path FROM assets WHERE user_id = ? AND (id IN (${assetIds.map(() => '?').join(',')}) OR parent_asset_id IN (${assetIds.map(() => '?').join(',')}))`,

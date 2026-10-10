@@ -62,6 +62,7 @@ export function recentWork(userId, perTool = 4) {
     colorize: group(photos.filter((item) => item.tool === 'colorize')),
     repair: group(photos.filter((item) => item.tool === 'repair')),
     upscale: group(photos.filter((item) => item.tool === 'upscale')),
+    edit: group(photos.filter((item) => item.tool === 'edit')),
     animate: group(videos.filter((item) => item.tool === 'animate')),
     'edit-video': group(videos.filter((item) => item.tool === 'edit')),
   };

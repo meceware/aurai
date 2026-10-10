@@ -42,7 +42,7 @@ function Choice({ id, value, title, note, selected }) {
  * Asks what to download: which version, which format, and for JPEG how much compression. The
  * Local version comes with the current Color / Brightness / Exposure settings applied.
  */
-export function DownloadDialog({ open, onOpenChange, initialVersion = 'locked', run, number, source, title, dials, adjusted, defaults }) {
+export function DownloadDialog({ open, onOpenChange, initialVersion = 'locked', versions, single = false, run, number, source, title, dials, adjusted, defaults }) {
   const [version, setVersion] = useState(initialVersion);
   const [format, setFormat] = useState(defaults?.downloadFormat ?? 'jpeg');
   const [quality, setQuality] = useState(defaults?.jpegQuality ?? 'max');
@@ -81,11 +81,17 @@ export function DownloadDialog({ open, onOpenChange, initialVersion = 'locked', 
               id="dl-locked"
               value="locked"
               selected={version === 'locked'}
-              title="Local"
-              note={`${run.locked.width > source.width ? 'Your photo, enlarged' : 'Your photo at full resolution'} · ${run.locked.width}×${run.locked.height}${adjusted ? ' · with your adjustments' : ''}`}
+              title={versions?.locked.name ?? 'Local'}
+              note={
+                single && run.ai
+                  ? `As the model drew it · ${run.locked.width}×${run.locked.height}`
+                  : `${run.locked.width > source.width ? 'Your photo, enlarged' : 'Your photo at full resolution'} · ${run.locked.width}×${run.locked.height}${adjusted ? ' · with your adjustments' : ''}`
+              }
             />
-            {/* Upscale's free resize has no AI redraw. */}
-            {run.ai ? <Choice id="dl-ai" value="ai" selected={version === 'ai'} title="AI redraw" note={`As the model drew it · ${run.ai.width}×${run.ai.height}`} /> : null}
+            {/* Upscale's free resize has no AI redraw, and an unpainted edit is the AI's image itself. */}
+            {run.ai && !single ? (
+              <Choice id="dl-ai" value="ai" selected={version === 'ai'} title={versions?.ai.name ?? 'AI redraw'} note={`As the model drew it · ${run.ai.width}×${run.ai.height}`} />
+            ) : null}
             <Choice id="dl-original" value="original" selected={version === 'original'} title="Original" note="Exactly as you uploaded it" />
           </RadioGroup>
 

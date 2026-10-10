@@ -30,8 +30,9 @@ const FOLLOWUP_SAMPLE = { instruction: 'a little darker' };
 const MOTION_SAMPLE = { instruction: 'Also: end closer to the faces' };
 const EDIT_SAMPLE = { instruction: 'make it look like a 1970s home movie' };
 const REPAIR_SAMPLE = { instruction: 'the scratch across the sky' };
+const EDIT_IMAGE_SAMPLE = { instruction: 'give him a red baseball cap' };
 const sampleFor = (key) =>
-  key === 'followup' ? FOLLOWUP_SAMPLE : key === 'repair-refine' ? REPAIR_SAMPLE : key === 'video-edit' ? EDIT_SAMPLE : key.startsWith('motion-') ? MOTION_SAMPLE : SAMPLES;
+  key === 'followup' ? FOLLOWUP_SAMPLE : key === 'repair-refine' ? REPAIR_SAMPLE : key === 'video-edit' ? EDIT_SAMPLE : key === 'edit' || key === 'edit-area' ? EDIT_IMAGE_SAMPLE : key.startsWith('motion-') ? MOTION_SAMPLE : SAMPLES;
 
 function PromptEditor({ prompt }) {
   const [text, setText] = useState(prompt.text);

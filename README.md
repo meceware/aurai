@@ -18,11 +18,15 @@ This is a small project I wanted to create to use Openrouter image and video AI 
   the rest of the photo stays your own.
 - **Upscale** — makes a small photo bigger and sharper, up to 4K. The shapes and colors stay your
   photo's own, and the AI only adds finer detail. You can also just resize it, for free.
+- **Edit Image** — change a photo with a sentence: "make it a winter day". Paint over a part of
+  it to change only that part, like "a red cap" on his head; the rest of the photo stays your own.
 - **Animate from Image** — a slow camera move over a still photo, where nobody moves. Try several
   AI models side by side, or make a free Ken Burns zoom on your own server.
 - **Edit Video** — upload a short clip and write what to change: "make it a snowy winter day".
 - Before/after slider, small fixes like "a little warmer skin", downloads in full size.
-- Send a result on to the next tool: repair a photo, colorize it, upscale it, then animate it.
+- Send a result on to the next tool: repair a photo, colorize it, edit it, upscale it, then animate it.
+- Drop up to 10 photos at once and start them all with one model.
+- Mark finished photos and videos as done, to keep the history tidy.
 - A history of everything you made. You see the price of a run before you start it, whenever
   OpenRouter publishes one.
 - Sign in with a code sent by email. No passwords.
@@ -100,7 +104,8 @@ To send real emails, fill in the `EMAIL_SERVER_*` and `EMAIL_FROM` lines in `.en
 | `AUTH_SECRET` | yes | Any long random text. Changing it signs everyone out. |
 | `ENCRYPTION_KEY` | yes | Protects the OpenRouter keys saved in the database. Keep it safe; without it, saved keys cannot be read. |
 | `SITE_URL` | yes | The address you open Aurai at, no `/` at the end. |
-| `EMAIL_SERVER_HOST`, `EMAIL_SERVER_PORT`, `EMAIL_SERVER_USER`, `EMAIL_SERVER_PASSWORD`, `EMAIL_FROM` | no | Your SMTP server, for sign-in emails. |
+| `EMAIL_SERVER_HOST`, `EMAIL_SERVER_PORT`, `EMAIL_SERVER_USER`, `EMAIL_SERVER_PASSWORD` | no | Your SMTP server, for sign-in emails. |
+| `EMAIL_FROM` | no | The address emails come from, like `aurai@example.com` |
 | `SIGNUP_ENABLED` | no | `false` stops new accounts. Your own account keeps working. |
 | `ALLOWED_EMAIL_DOMAINS` | no | Only these email domains can sign up, for example `example.com`. |
 | `MAX_USERS` | no | The most accounts there can be. `0` means no limit. |

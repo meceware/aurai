@@ -56,6 +56,7 @@ export function StoragePanel({ usage }) {
             ['colorize', 'Colorize'],
             ['repair', 'Repair'],
             ['upscale', 'Upscale'],
+            ['edit', 'Edit Image'],
             ['animate', 'Animate'],
             ['edit-video', 'Edit Video'],
           ]

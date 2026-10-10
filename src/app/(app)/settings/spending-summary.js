@@ -1,6 +1,6 @@
 const money = (value) => `$${(value ?? 0).toFixed(value > 0 && value < 1 ? 3 : 2)}`;
 const MONTH = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-const TOOL = { enhance: 'Enhance', colorize: 'Colorize', repair: 'Repair', upscale: 'Upscale', animate: 'Animate', 'edit-video': 'Edit Video' };
+const TOOL = { enhance: 'Enhance', colorize: 'Colorize', repair: 'Repair', upscale: 'Upscale', edit: 'Edit Image', animate: 'Animate', 'edit-video': 'Edit Video' };
 const runs = (n) => `${n} run${n === 1 ? '' : 's'}`;
 
 export function SpendingSummary({ spending }) {

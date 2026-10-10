@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Bandage, CheckCircle2, ChevronRight, Clapperboard, Film, ImageIcon, ImageUpscale, MoreHorizontal, Palette, Plus, RotateCcw, Settings, Wand2 } from 'lucide-react';
+import { Bandage, Brush, CheckCircle2, ChevronRight, Clapperboard, Film, ImageIcon, ImageUpscale, MoreHorizontal, Palette, Plus, RotateCcw, Settings, Wand2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { setDone } from '@/app/(app)/history-actions';
 import { AccountMenu } from '@/components/account-menu';
@@ -35,6 +35,7 @@ const SECTIONS = [
       { key: 'colorize', href: '/colorize', label: 'Colorize', icon: Wand2, empty: 'Photos you colorize will appear here.' },
       { key: 'repair', href: '/repair', label: 'Repair', icon: Bandage, empty: 'Photos you repair will appear here.' },
       { key: 'upscale', href: '/upscale', label: 'Upscale', icon: ImageUpscale, empty: 'Photos you upscale will appear here.' },
+      { key: 'edit', href: '/edit-image', label: 'Edit Image', icon: Brush, empty: 'Photos you edit will appear here.' },
     ],
   },
   {
